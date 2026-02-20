@@ -118,15 +118,18 @@ tw-icon.undo {
     if (!WEB_APP_URL) throw new Error("WEB_APP_URL 未设置");
 
     const payload = TA.buildPayload();
-
-    fetch(WEB_APP_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload),
-    });
-
-    return payload;
+fetch(WEB_APP_URL, {
+  method: "POST",
+  mode: "cors",
+  headers: { "Content-Type": "text/plain;charset=utf-8" },
+  body: JSON.stringify(payload),
+})
+  .then(async (r) => {
+    const t = await r.text();
+    console.log("POST status:", r.status, "text:", t);
+  })
+  .catch((e) => console.error("POST error:", e));
+  
   };
 
   TA.resetForNewRun = function () {
