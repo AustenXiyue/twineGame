@@ -29,7 +29,8 @@ tw-icon.undo {
     startMs: null,
     uploaded: false,
   });
-
+  window.__TA_BOOT__ = (window.__TA_BOOT__ || 0) + 1;
+  console.log("[TWINE_ANALYTICS] BOOT", window.__TA_BOOT__, "ready=", document.readyState);
   function nowISO() {
     return new Date().toISOString();
   }
@@ -85,6 +86,10 @@ tw-icon.undo {
   }
 
   function isOnUploadPassage() {
+    const name = getCurrentPassageNameFromDOM();
+    if (name) return name === UPLOAD_PASSAGE_NAME;
+
+    // 兜底：再退回 ENDING= 文本（可留可不留）
     const p = document.querySelector("tw-passage");
     const txt = (p && p.textContent) ? p.textContent : "";
     return txt.includes("ENDING=");
@@ -118,18 +123,20 @@ tw-icon.undo {
     if (!WEB_APP_URL) throw new Error("WEB_APP_URL 未设置");
 
     const payload = TA.buildPayload();
-fetch(WEB_APP_URL, {
-  method: "POST",
-  mode: "cors",
-  headers: { "Content-Type": "text/plain;charset=utf-8" },
-  body: JSON.stringify(payload),
-})
-  .then(async (r) => {
-    const t = await r.text();
-    console.log("POST status:", r.status, "text:", t);
-  })
-  .catch((e) => console.error("POST error:", e));
-  
+
+    fetch(WEB_APP_URL, {
+      method: "POST",
+      mode: "cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload),
+    })
+      .then(async (r) => {
+        const t = await r.text();
+        console.log("POST status:", r.status, "text:", t);
+      })
+      .catch((e) => console.error("POST error:", e));
+
+    return payload;
   };
 
   TA.resetForNewRun = function () {
@@ -203,16 +210,41 @@ fetch(WEB_APP_URL, {
       autoUploadIfNeeded();
     }, 0);
   });
+  function startRetryAutoUpload(durationMs = 3000, intervalMs = 100) {
+    const start = Date.now();
+    const timer = setInterval(() => {
+      maybeResetOnStart();
+      autoUploadIfNeeded();
 
-  window.addEventListener("load", () => {
+      if (mem.uploaded) clearInterval(timer);
+      else if (Date.now() - start > durationMs) clearInterval(timer);
+    }, intervalMs);
+  }
+  function kick() {
+    if (kick._started) return;
+    kick._started = true;
+
     TA.init();
-    observer.observe(document.body, { childList: true, subtree: true });
+
+    const root = document.querySelector("tw-story") || document.body || document.documentElement;
+    observer.observe(root, { childList: true, subtree: true });
 
     maybeResetOnStart();
     autoUploadIfNeeded();
-    setTimeout(() => { maybeResetOnStart(); autoUploadIfNeeded(); }, 50);
-    setTimeout(() => { maybeResetOnStart(); autoUploadIfNeeded(); }, 200);
-  });
+
+    const start = Date.now();
+    const timer = setInterval(() => {
+      maybeResetOnStart();
+      autoUploadIfNeeded();
+
+      if (mem.uploaded) return clearInterval(timer);
+      if (Date.now() - start > 5000) return clearInterval(timer);
+    }, 100);
+  }
+
+  kick();
+
+  document.addEventListener("DOMContentLoaded", kick, { once: true });
 })();</script><tw-passagedata pid="1" name="AskWhy" tags="" position="725,675" size="100,100">Your twin smiles, but it doesn&#39;t reach her eyes.
 
 &quot;Because the hallway copies people. It makes a second version—and keeps the first.&quot;
@@ -381,8 +413,7 @@ A mirror hangs on the wall. A door is slightly open.
 
 
 [[Look at the mirror|Mirror]]
-[[Go to the door|Door]]
-</tw-passagedata><tw-passagedata pid="20" name="Stay" tags="" position="650,900" size="100,100">You take a step closer to the mirror.
+[[Go to the door|Door]]</tw-passagedata><tw-passagedata pid="20" name="Stay" tags="" position="650,900" size="100,100">You take a step closer to the mirror.
 
 Your twin presses her palm to the glass.
 &quot;Choose carefully,&quot; she says. &quot;Or you&#39;ll switch places with me.&quot;
